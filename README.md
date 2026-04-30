@@ -100,10 +100,10 @@ See [ROADMAP.md](ROADMAP.md) for the full plan. Summary:
 
 | Step | What | Owner | Status |
 |------|------|-------|--------|
-| 1 | Characterize the plasma reservoir (memory, separation, dimensionality) | Majesti, Samuel, Luca | Not started |
-| 2 | Run standard benchmarks (NARMA-10, Mackey-Glass) | Samuel, Luca | Not started |
-| 3 | Bayesian network readout | Mahault | Implemented |
-| 4 | Digital twin (GP surrogate of plasma) | Luca | Stub ready |
+| 1 | Characterize the plasma reservoir (memory, separation, dimensionality) | Majesty, Samiulhaq (Luca - support) | Not started |
+| 2 | Run standard benchmarks (NARMA-10, Mackey-Glass) | Majesty, Samiulhaq (Luca - support) | Not started |
+| 3 | Bayesian network readout | Mahault, Majesty | Implemented |
+| 4 | Digital twin (GP surrogate of plasma) | Luca/Alejandro, Majesty | Stub ready |
 | 5 | Comparison paper | All | Blocked on 1-4 |
 
 ## Next Steps for Step 3
