@@ -1,9 +1,11 @@
 """Physical plasma reservoir — data loader for real experimental recordings.
 
 TODO (Majesti / Samuel):
-    - Implement load_trial() to parse photodiode CSV recordings
     - Implement the Reservoir interface to wrap live hardware
     - Define the voltage encoding for audio→plasma injection
+    - Recordings currently have no logged input signal (no voltage_in
+      column) and no same-session baseline, so memory_capacity() and
+      baseline subtraction can't be run yet — see ROADMAP Step 1.
 """
 from __future__ import annotations
 
@@ -17,31 +19,42 @@ from .interface import Reservoir, ReservoirState
 class PlasmaDataLoader:
     """Load pre-recorded plasma trials from disk.
 
-    Expected CSV format per trial:
-        timestamp, voltage_in, intensity, frequency, oscillation
+    Actual CSV format (as delivered):
+        Timestamp_Seconds, Brightness, Frequency_Hz, Settle_Micros
 
-    One file per trial.  Files are named: {word}_{volume_pct}_{trial_id}.csv
+    One file per recording, e.g. plasma_data_apple_m.csv.  There is no
+    voltage_in column and no word/volume_pct/trial_id encoded in the
+    filename — each file is a single continuous session, not a
+    discrete labeled trial.
     """
 
     def __init__(self, data_dir: str | Path):
         self.data_dir = Path(data_dir)
 
-    def load_trial(self, word: str, volume_pct: int, trial_id: int = 0) -> tuple[np.ndarray, np.ndarray]:
-        """Return (input_signal, reservoir_states) for one trial.
+    def load_trial(self, filename: str) -> tuple[np.ndarray, np.ndarray]:
+        """Return (timestamps, states) for one recording.
 
         Returns
         -------
-        signal : (T,) voltage input
-        states : (T, 3) baseline-subtracted [intensity, freq, osc]
+        timestamps : (T,) seconds
+        states : (T, 3) raw [brightness, frequency_hz, settle_micros],
+            NOT baseline-subtracted (no same-session baseline exists
+            for this dataset yet).
         """
-        raise NotImplementedError(
-            "Implement this to parse your photodiode CSV recordings. "
-            "See docstring for expected format."
+        path = self.data_dir / filename
+        data = np.genfromtxt(path, delimiter=",", names=True)
+        timestamps = data["Timestamp_Seconds"]
+        states = np.column_stack(
+            [data["Brightness"], data["Frequency_Hz"], data["Settle_Micros"]]
         )
+        return timestamps, states
 
     def list_trials(self) -> list[dict]:
-        """List all available trials as [{word, volume_pct, trial_id, path}]."""
-        raise NotImplementedError
+        """List all available recordings as [{name, path}]."""
+        return [
+            {"name": p.stem, "path": p}
+            for p in sorted(self.data_dir.glob("*.csv"))
+        ]
 
 
 class LivePlasmaReservoir(Reservoir):

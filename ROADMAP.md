@@ -16,6 +16,14 @@
 
 **Goal**: Prove the plasma is actually computing — not just passing signal through.
 
+### Status (2026-07-15)
+
+Mahault reviewed graphs Majesty circulated claiming to prove the reservoir works and flagged real problems: baseline recorded under different conditions than the word trials (brightness ~60 vs ~800, settle time off by an order of magnitude), a "scattered vs clustered" contrast that looks like an autoscaling artifact rather than a real effect, and a classifier that's basically counting syllable peaks in settle time, which a mic alone could do with no plasma involved. Alejandro asked Majesty for the raw CSVs.
+
+Two files came back: `plasma_data_apple_m.csv` and `plasma_data_apple_c.csv` (see `data/README.md` for full provenance and column schema). They don't yet resolve any of the concerns above — no same-session baseline, no input signal log, no trial labels (each file is one continuous recording, not the 50-trials-per-word the report claims), no second word to test the syllable-count confound, no audio-only control. `experiments/real_data_diagnostic.py` runs the one thing that's honestly computable (per-recording PCA dimensionality) and explicitly does not run `separation_matrix`/`lyapunov_estimate`/`memory_capacity` since this data can't support them.
+
+Still needed from Majesty before this step can actually run: clarification of what `_m`/`_c` denote, a same-session baseline, repeated labeled trials, the raw input signal, and an apple-vs-mango + audio-only-control pair.
+
 ### Tasks
 - [ ] Collect multi-trial data: same word, same volume, 10+ repeats → determinism
 - [ ] Collect multi-class data: 3+ distinct words at same volume → separation
