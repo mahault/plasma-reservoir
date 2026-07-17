@@ -1,8 +1,20 @@
 """Experiment: Bayesian network readout vs flat linear readout.
 
 Runs on synthetic ESN data until real plasma data is available.
-Demonstrates that the DAG structure improves predictions when
-the target has genuine hierarchical dependencies.
+
+Honest framing (2026-07-17): with linear-Gaussian nodes, a DAG whose
+parents are *predicted from the reservoir states* provably collapses to
+the flat linear readout — compositions of linear maps are linear — so
+flat vs DAG-with-predicted-parents is expected to tie on NMSE. The
+structured readout earns its keep in three ways this script measures:
+
+  1. Observed parents: when intermediate observables are measured at
+     test time (as plasma channels are), conditioning on them beats the
+     flat readout.
+  2. Calibrated uncertainty: Monte Carlo propagation accounts for parent
+     uncertainty that the plug-in forward pass ignores.
+  3. Fair model evidence: p(y | states, parents) vs p(y | states) on the
+     same data — does structure carry information beyond the states?
 """
 from __future__ import annotations
 
@@ -82,63 +94,77 @@ def run_experiment():
     ]
     bn = BayesNetReadout(dag_nodes)
     bn_lml = bn.fit(train_states, train_targets)
-    bn_result = bn.predict(test_states)
+
+    # plug-in: children condition on predicted parent means (old default)
+    bn_plugin = bn.predict(test_states)["word_class"]
+    # Monte Carlo: parent uncertainty propagated through the DAG
+    bn_mc = bn.predict(test_states, n_samples=200)["word_class"]
+    # observed parents: energy + oscillation measured at test time
+    bn_obs = bn.predict(
+        test_states,
+        observed={
+            "energy": test_targets["energy"],
+            "oscillation": test_targets["oscillation"],
+        },
+    )["word_class"]
 
     # --- Flat linear readout (baseline) ---
     flat = LinearReadout(bayesian=True)
     flat.fit(train_states, train_targets["word_class"])
-    flat_result = flat.predict(test_states)
+    flat_pred = flat.predict(test_states)
 
     # --- Evaluate ---
     y_true = test_targets["word_class"]
 
-    bn_pred = bn_result["word_class"]
-    flat_pred = flat_result
+    def report(name, pred):
+        line = f"  {name:24s} NMSE {nmse(y_true, pred.mean):.4f}  CoD {cod(y_true, pred.mean):.4f}"
+        if pred.std is not None:
+            line += f"  ECE {calibration_error(y_true, pred.mean, pred.std):.4f}"
+        print(line)
 
-    print("=== Bayesian Network Readout ===")
-    print(f"  NMSE:  {nmse(y_true, bn_pred.mean):.4f}")
-    print(f"  CoD:   {cod(y_true, bn_pred.mean):.4f}")
-    print(f"  ECE:   {calibration_error(y_true, bn_pred.mean, bn_pred.std):.4f}")
-    print(f"  log-ML: {bn_lml:.2f}")
+    print("=== word_class readout comparison (test set) ===")
+    report("flat linear", flat_pred)
+    report("DAG, plug-in parents", bn_plugin)
+    report("DAG, MC propagation", bn_mc)
+    report("DAG, observed parents", bn_obs)
+    print(f"\n  DAG training log-ML (all nodes): {bn_lml:.2f}")
     print()
-    print("=== Flat Linear Readout ===")
-    print(f"  NMSE:  {nmse(y_true, flat_pred.mean):.4f}")
-    print(f"  CoD:   {cod(y_true, flat_pred.mean):.4f}")
-    if flat_pred.std is not None:
-        print(f"  ECE:   {calibration_error(y_true, flat_pred.mean, flat_pred.std):.4f}")
+    print("Flat vs DAG-with-predicted-parents tying on NMSE is expected:")
+    print("compositions of linear-Gaussian nodes are linear in the states.")
+    print("The structured readout wins when parent observables are measured")
+    print("at test time; MC propagation reflects parent uncertainty that the")
+    print("plug-in pass ignores.")
     print()
 
-    # --- Model comparison (log Bayes factor) ---
+    # --- Model comparison (fair same-data log Bayes factor) ---
     log_bf = bn.model_comparison(train_states, train_targets)
     for node, lbf in log_bf.items():
-        verdict = "DAG wins" if lbf > 0 else "flat wins"
-        print(f"  log BF ({node}): {lbf:.2f}  ({verdict})")
+        verdict = (
+            "parents carry information beyond states"
+            if lbf > 0 else "flat wins"
+        )
+        print(f"  log BF p(y|states,parents) vs p(y|states), {node}: "
+              f"{lbf:.2f}  ({verdict})")
 
     # --- Plot ---
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-
-    axes[0].set_title("BayesNet readout: word_class")
-    axes[0].plot(y_true, label="true", alpha=0.7)
-    axes[0].plot(bn_pred.mean, label="predicted", alpha=0.7)
-    axes[0].fill_between(
-        range(len(y_true)),
-        bn_pred.mean - 2 * bn_pred.std,
-        bn_pred.mean + 2 * bn_pred.std,
-        alpha=0.2, label="95% CI",
-    )
-    axes[0].legend()
-
-    axes[1].set_title("Flat readout: word_class")
-    axes[1].plot(y_true, label="true", alpha=0.7)
-    axes[1].plot(flat_pred.mean, label="predicted", alpha=0.7)
-    if flat_pred.std is not None:
-        axes[1].fill_between(
-            range(len(y_true)),
-            flat_pred.mean - 2 * flat_pred.std,
-            flat_pred.mean + 2 * flat_pred.std,
-            alpha=0.2, label="95% CI",
-        )
-    axes[1].legend()
+    variants = [
+        ("Flat readout", flat_pred),
+        ("DAG, MC propagation", bn_mc),
+        ("DAG, observed parents", bn_obs),
+    ]
+    fig, axes = plt.subplots(1, len(variants), figsize=(18, 4), sharey=True)
+    for ax, (title, pred) in zip(axes, variants):
+        ax.set_title(f"{title}: word_class")
+        ax.plot(y_true, label="true", alpha=0.7)
+        ax.plot(pred.mean, label="predicted", alpha=0.7)
+        if pred.std is not None:
+            ax.fill_between(
+                range(len(y_true)),
+                pred.mean - 2 * pred.std,
+                pred.mean + 2 * pred.std,
+                alpha=0.2, label="95% CI",
+            )
+        ax.legend()
 
     plt.tight_layout()
     plt.savefig("bayesnet_vs_flat.png", dpi=150)

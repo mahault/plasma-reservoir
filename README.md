@@ -11,7 +11,7 @@ Standard reservoir computing uses a single linear readout from the reservoir's h
 - Formal model comparison via log Bayes factors (DAG vs flat)
 - A dynamic Bayesian network mode for time-series tasks
 
-The physical reservoir is a **neon bulb plasma**. Audio is converted to voltage, injected into the plasma, and three observables are read out via photodiode: **intensity** (brightness), **frequency** (flicker rate), and **oscillation**. Baseline subtraction isolates the plasma's nonlinear transformation of the input. Early results show 97% accuracy on predicting trajectory direction in this 3D state space.
+The physical reservoir is a **neon bulb plasma**. Audio is converted to voltage, injected into the plasma, and three observables are read out via photodiode: **intensity** (brightness), **frequency** (flicker rate), and **oscillation**. Baseline subtraction isolates the plasma's nonlinear transformation of the input. Whether the plasma actually computes (rather than passing signal through) is an open question — see `PROTOCOL.md` for the recording protocol designed to answer it, and `data/README.md` for what the recordings received so far do and don't show.
 
 ## Project Structure
 
@@ -35,18 +35,24 @@ plasma_rc/
     └── metrics.py              # NMSE, CoD, calibration error
 
 experiments/
-└── bayesnet_readout.py         # Synthetic ESN demo: DAG vs flat readout
+├── bayesnet_readout.py         # Synthetic ESN demo: DAG vs flat readout
+└── real_data_diagnostic.py     # Honest diagnostic of the real recordings
+
+data/                           # Real plasma recordings (see data/README.md)
 
 tests/
-└── test_bayesnet.py            # 10 tests covering DAG construction, fit/predict,
-                                # model comparison, and temporal mode
+└── test_bayesnet.py            # 14 tests covering DAG construction, fit/predict,
+                                # model comparison, observed parents, MC
+                                # propagation, and temporal mode
 ```
 
 ## What's Implemented
 
 **Fully working:**
 - `BayesNetReadout` — DAG-structured readout with topological ordering, per-node BayesianRidge, ground-truth parent conditioning during training, and temporal (dynamic Bayesian network) mode
-- `model_comparison()` — log Bayes factor comparing DAG readout vs flat readout
+- `predict(observed=...)` — condition children on intermediate observables measured at test time (where the structured readout genuinely beats a flat one)
+- `predict(n_samples=K)` — Monte Carlo uncertainty propagation through the DAG (per-path parent sampling, law of total variance)
+- `model_comparison()` — fair same-data log Bayes factor: p(y | states, parents) vs p(y | states)
 - `LinearReadout` — baseline for comparison (Ridge or BayesianRidge)
 - Characterization metrics — memory capacity, separation matrix, Lyapunov estimation, effective dimensionality
 - Benchmark signal generators — NARMA-10, Mackey-Glass
@@ -80,19 +86,16 @@ python experiments/bayesnet_readout.py
 
 Example output:
 ```
-=== Bayesian Network Readout ===
-  NMSE:  0.2280
-  CoD:   0.7720
-  ECE:   0.0407
-  log-ML: 4169.85
+=== word_class readout comparison (test set) ===
+  flat linear              NMSE 0.2269  CoD 0.7731  ECE 0.0136
+  DAG, plug-in parents     NMSE 0.2280  CoD 0.7720  ECE 0.0407
+  DAG, MC propagation      NMSE 0.2282  CoD 0.7718  ECE 0.0076
+  DAG, observed parents    NMSE 0.1802  CoD 0.8198  ECE 0.0207
 
-=== Flat Linear Readout ===
-  NMSE:  0.2269
-  CoD:   0.7731
-  ECE:   0.0136
-
-  log BF (word_class): 3666.49  (DAG wins)
+  log BF p(y|states,parents) vs p(y|states), word_class: 91.12
 ```
+
+Flat and DAG-with-predicted-parents tying on NMSE is expected — compositions of linear-Gaussian nodes are linear in the states, so the DAG collapses to the flat readout in that regime. The structured readout wins when intermediate observables are measured at test time (as the plasma channels are), and Monte Carlo propagation gives the best-calibrated uncertainty of all variants.
 
 ## Roadmap
 
@@ -109,6 +112,6 @@ See [ROADMAP.md](ROADMAP.md) for the full plan. Summary:
 ## Next Steps for Step 3
 
 - Structure learning — learn the DAG from data (BIC/BDeu scoring) instead of hand-specifying it
-- Monte Carlo uncertainty propagation through the DAG
+- Nonlinear node option (GP or polynomial features) — required for a DAG-beats-flat result when parents must be predicted
 - Visualization of DAG with edge weights and per-node uncertainty
 - Apply to real plasma data once CSV recordings are available

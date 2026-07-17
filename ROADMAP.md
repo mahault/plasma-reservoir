@@ -74,9 +74,23 @@ Update 2026-07-17: two more recordings arrived (`with_amplifier` / `without_ampl
 - [x] Unit tests
 
 ### TODO
-- [ ] Run synthetic experiment, verify DAG wins when structure matches data
+- [x] Run synthetic experiment (2026-07-17). Outcome was not "DAG wins":
+      with linear-Gaussian nodes, a DAG whose parents are predicted from
+      the states provably collapses to the flat readout, and NMSE ties at
+      every training size (30-700). The original `model_comparison()` log
+      BF of ~3666 was a bug (summed likelihoods of different data vectors)
+      — now fixed to a fair same-data comparison (log BF ≈ 91). The real
+      wins, both verified: observed-parents mode (NMSE 0.227 → 0.180) and
+      MC uncertainty propagation (ECE 0.041 → 0.008, best of all variants).
+      Paper framing shifts to: structured readouts win when intermediate
+      observables are measured at test time (plasma channels are), when
+      uncertainty must decompose across named quantities, or when nodes
+      are nonlinear.
+- [x] Uncertainty propagation: Monte Carlo forward pass through DAG
+      (`predict(..., n_samples=K)`, per-path sampling, law of total variance)
 - [ ] Structure learning: learn the DAG from data (score-based, e.g. BIC/BDeu)
-- [ ] Uncertainty propagation: Monte Carlo forward pass through DAG (sample from parent posteriors)
+- [ ] Nonlinear node option (e.g. GP or polynomial features) — needed for a
+      DAG-beats-flat result with predicted parents
 - [ ] Visualization: DAG graph with edge weights, per-node uncertainty
 - [ ] Apply to real plasma data once Step 1 delivers CSV files
 - [ ] Paper figures: DAG vs flat NMSE, calibration plots, log BF across tasks

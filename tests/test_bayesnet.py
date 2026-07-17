@@ -90,6 +90,22 @@ class TestFitPredict:
         assert nmse < 0.1, f"NMSE too high: {nmse:.4f}"
 
 
+@pytest.fixture
+def noisy_parent_data():
+    """Parents carry information NOT present in the states.
+
+    A and B have independent noise, so observing them at test time
+    genuinely adds information about C beyond what states provide.
+    """
+    rng = np.random.RandomState(2)
+    N, D = 300, 10
+    states = rng.randn(N, D)
+    a = states @ rng.randn(D) + rng.randn(N) * 0.5
+    b = states @ rng.randn(D) + rng.randn(N) * 0.5
+    c = 0.5 * a + 0.5 * b + rng.randn(N) * 0.05
+    return states, {"A": a, "B": b, "C": c}
+
+
 class TestModelComparison:
     def test_returns_log_bf(self, simple_dag, synthetic_data):
         states, targets = synthetic_data
@@ -98,6 +114,58 @@ class TestModelComparison:
         comp = bn.model_comparison(states, targets)
         assert "C" in comp
         assert isinstance(comp["C"], float)
+
+    def test_positive_bf_when_parents_informative(self, simple_dag, noisy_parent_data):
+        states, targets = noisy_parent_data
+        bn = BayesNetReadout(simple_dag)
+        bn.fit(states, targets)
+        comp = bn.model_comparison(states, targets)
+        assert comp["C"] > 0
+
+
+class TestObservedParents:
+    def test_observed_parents_beat_predicted(self, simple_dag, noisy_parent_data):
+        states, targets = noisy_parent_data
+        bn = BayesNetReadout(simple_dag)
+        bn.fit(states[:200], {k: v[:200] for k, v in targets.items()})
+        y = targets["C"][200:]
+
+        pred = bn.predict(states[200:])["C"].mean
+        obs = bn.predict(
+            states[200:],
+            observed={"A": targets["A"][200:], "B": targets["B"][200:]},
+        )["C"].mean
+
+        def _nmse(p):
+            return np.mean((y - p) ** 2) / np.var(y)
+
+        assert _nmse(obs) < _nmse(pred)
+
+
+class TestMonteCarloPropagation:
+    def test_mc_shapes_and_std_inflation(self, simple_dag, noisy_parent_data):
+        states, targets = noisy_parent_data
+        bn = BayesNetReadout(simple_dag)
+        bn.fit(states[:200], {k: v[:200] for k, v in targets.items()})
+        plugin = bn.predict(states[200:])["C"]
+        mc = bn.predict(states[200:], n_samples=100)["C"]
+        assert mc.mean.shape == plugin.mean.shape
+        assert mc.std.shape == plugin.std.shape
+        # MC std must account for parent uncertainty the plug-in ignores
+        assert mc.std.mean() > plugin.std.mean()
+
+    def test_mc_temporal_not_implemented(self):
+        nodes = [
+            NodeSpec("X", parents=[]),
+            NodeSpec("Y", parents=["X"], is_target=True),
+        ]
+        rng = np.random.RandomState(3)
+        states = rng.randn(50, 4)
+        x = states @ rng.randn(4)
+        bn = BayesNetReadout(nodes, temporal=True)
+        bn.fit(states, {"X": x, "Y": 0.5 * x})
+        with pytest.raises(NotImplementedError):
+            bn.predict(states, n_samples=10)
 
 
 class TestTemporal:

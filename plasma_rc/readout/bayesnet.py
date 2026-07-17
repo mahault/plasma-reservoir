@@ -136,15 +136,44 @@ class BayesNetReadout:
 
         return total_log_ml
 
-    def predict(self, reservoir_states: np.ndarray) -> BayesNetResult:
+    def predict(
+        self,
+        reservoir_states: np.ndarray,
+        observed: dict[str, np.ndarray] | None = None,
+        n_samples: int = 0,
+        seed: int = 0,
+    ) -> BayesNetResult:
         """Forward pass through the DAG on new data.
 
-        Returns BayesNetResult with per-node mean, std, weights.
+        Parameters
+        ----------
+        reservoir_states : (N, D) state matrix
+        observed : optional {node_name: (N,)} values measured at test
+            time. An observed node is still predicted (its NodeResult
+            is reported), but its children condition on the measured
+            values instead of the predictions. For a linear-Gaussian
+            DAG this is the regime where structure genuinely beats a
+            flat readout — predicted parents are functions of the same
+            states and add nothing.
+        n_samples : if > 0, propagate uncertainty through the DAG by
+            Monte Carlo — each child conditions on samples from its
+            parents' predictive distributions instead of their means,
+            so downstream std reflects parent uncertainty. The default
+            0 keeps the plug-in (mean-substitution) behaviour, whose
+            std understates total uncertainty at child nodes.
+        seed : RNG seed for the Monte Carlo pass.
         """
         if not self._models:
             raise RuntimeError("Call fit() first.")
+        observed = observed or {}
+        if n_samples > 0:
+            if self._temporal:
+                raise NotImplementedError(
+                    "Monte Carlo propagation is not implemented for "
+                    "temporal mode."
+                )
+            return self._predict_mc(reservoir_states, observed, n_samples, seed)
 
-        N = reservoir_states.shape[0]
         predictions: dict[str, np.ndarray] = {}
         node_results: dict[str, NodeResult] = {}
         total_log_ml = 0.0
@@ -164,7 +193,72 @@ class BayesNetReadout:
                 mean = np.concatenate([[0.0], mean])
                 std = np.concatenate([[std.mean()], std])
 
-            predictions[node_name] = mean
+            # children condition on measured values where available
+            predictions[node_name] = observed.get(node_name, mean)
+            node_results[node_name] = NodeResult(
+                mean=mean,
+                std=std,
+                weights=model.coef_,
+                alpha=model.alpha_,
+                lambda_=model.lambda_,
+            )
+            if model.scores_ is not None and len(model.scores_) > 0:
+                total_log_ml += model.scores_[-1]
+
+        return BayesNetResult(nodes=node_results, log_marginal_likelihood=total_log_ml)
+
+    def _predict_mc(
+        self,
+        reservoir_states: np.ndarray,
+        observed: dict[str, np.ndarray],
+        n_samples: int,
+        seed: int,
+    ) -> BayesNetResult:
+        """Monte Carlo forward pass: sample parent posteriors per path."""
+        rng = np.random.RandomState(seed)
+        N = reservoir_states.shape[0]
+        samples: dict[str, np.ndarray] = {}  # {node: (N, K)}
+        node_results: dict[str, NodeResult] = {}
+        total_log_ml = 0.0
+
+        for node_name in self._order:
+            model = self._models[node_name]
+            parents = self._specs[node_name].parents
+            free = [p for p in parents if p not in observed]
+
+            if not free:
+                # input is fully determined — single predict, then sample
+                cols = [observed[p].reshape(-1, 1) for p in parents]
+                X = np.column_stack([reservoir_states] + cols) if cols else reservoir_states
+                mean, std = model.predict(X, return_std=True)
+                node_samples = mean[:, None] + std[:, None] * rng.randn(N, n_samples)
+            else:
+                # one forward path per parent sample, preserving
+                # parent-child correlation along each path
+                means = np.empty((N, n_samples))
+                node_samples = np.empty((N, n_samples))
+                variances = np.empty((N, n_samples))
+                for k in range(n_samples):
+                    cols = [
+                        (observed[p] if p in observed else samples[p][:, k]).reshape(-1, 1)
+                        for p in parents
+                    ]
+                    X = np.column_stack([reservoir_states] + cols)
+                    m_k, s_k = model.predict(X, return_std=True)
+                    means[:, k] = m_k
+                    variances[:, k] = s_k ** 2
+                    node_samples[:, k] = m_k + s_k * rng.randn(N)
+                mean = means.mean(axis=1)
+                # law of total variance: E[var] + var[E]
+                std = np.sqrt(variances.mean(axis=1) + means.var(axis=1))
+
+            if node_name in observed:
+                samples[node_name] = np.repeat(
+                    observed[node_name][:, None], n_samples, axis=1
+                )
+            else:
+                samples[node_name] = node_samples
+
             node_results[node_name] = NodeResult(
                 mean=mean,
                 std=std,
@@ -182,15 +276,33 @@ class BayesNetReadout:
         reservoir_states: np.ndarray,
         targets: dict[str, np.ndarray],
     ) -> dict[str, float]:
-        """Compare structured DAG readout vs flat single-node readout.
+        """Fair same-data comparison: structured vs flat readout per target.
 
-        For each target node marked is_target=True, trains a flat
-        BayesianRidge directly from reservoir states and compares
-        log marginal likelihood against the DAG path.
+        For each node marked is_target=True, fits two models on the SAME
+        target vector y:
+
+            structured : p(y | reservoir states, ground-truth parents)
+            flat       : p(y | reservoir states)
+
+        and returns the difference of their log marginal likelihoods — a
+        valid log Bayes factor (> 0 means the parent observables carry
+        information about y beyond the reservoir states).
+
+        This deliberately does NOT sum ancestor likelihoods: those are
+        likelihoods of *different* data vectors, and adding them makes
+        the structured side win by construction regardless of whether
+        the DAG structure is real.
+
+        Note that for a linear-Gaussian DAG, end-to-end prediction from
+        states alone collapses to the flat readout, so a positive BF here
+        translates into a predictive advantage only in settings where the
+        parent observables are measured at test time (see the `observed`
+        argument of predict()).
 
         Returns
         -------
-        comparison : {node_name: log_BF} where log_BF > 0 favours DAG
+        comparison : {node_name: log_BF} where log_BF > 0 favours
+            conditioning on parents
         """
         target_nodes = [n for n, s in self._specs.items() if s.is_target]
         if not target_nodes:
@@ -198,21 +310,27 @@ class BayesNetReadout:
 
         comparison = {}
         for node_name in target_nodes:
-            # Flat baseline
+            spec = self._specs[node_name]
+            y = targets[node_name]
+            X_structured = self._build_node_input(
+                node_name, reservoir_states, {},
+                targets=targets, is_training=True,
+            )
+            X_flat = reservoir_states
+            if self._temporal:
+                X_structured, X_flat, y = X_structured[1:], X_flat[1:], y[1:]
+
+            structured = BayesianRidge(
+                alpha_init=spec.prior_alpha,
+                lambda_init=spec.prior_lambda,
+                compute_score=True,
+            )
+            structured.fit(X_structured, y)
+
             flat = BayesianRidge(compute_score=True)
-            flat.fit(reservoir_states, targets[node_name])
-            flat_lml = flat.scores_[-1]
+            flat.fit(X_flat, y)
 
-            # DAG path: sum log-ML of this node + all ancestors
-            dag_lml = 0.0
-            ancestors = nx.ancestors(self._graph, node_name) | {node_name}
-            for anc in ancestors:
-                if anc in self._models:
-                    scores = self._models[anc].scores_
-                    if scores is not None and len(scores) > 0:
-                        dag_lml += scores[-1]
-
-            comparison[node_name] = dag_lml - flat_lml  # log Bayes factor
+            comparison[node_name] = structured.scores_[-1] - flat.scores_[-1]
 
         return comparison
 
