@@ -24,6 +24,8 @@ Two files came back: `plasma_data_apple_m.csv` and `plasma_data_apple_c.csv` (se
 
 Still needed from Majesty before this step can actually run: clarification of what `_m`/`_c` denote, a same-session baseline, repeated labeled trials, the raw input signal, and an apple-vs-mango + audio-only-control pair.
 
+Update 2026-07-17: two more recordings arrived (`with_amplifier` / `without_amplifier`, see `data/README.md`). The with-amplifier config reproduces the original low-brightness "baseline" regime, strongly suggesting the baseline-vs-word contrast in Majesty's graphs was an amplifier-config difference rather than computation. The without-amplifier recording shows the same settle-peak activity as the apple word recordings — whether anyone was speaking during it is unknown (accompanying email unread, Gmail connector down at the time).
+
 ### Tasks
 - [ ] Collect multi-trial data: same word, same volume, 10+ repeats → determinism
 - [ ] Collect multi-class data: 3+ distinct words at same volume → separation
