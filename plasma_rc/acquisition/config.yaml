@@ -1,0 +1,9 @@
+board: teensy41
+port: null
+fs_hz: 100000
+adc_bits: 12
+pre_roll_s: 1.0
+post_roll_s: 1.0
+audio_device: null
+audio_root: ./data/Data
+out_dir: ./data/out
