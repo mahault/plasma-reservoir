@@ -12,7 +12,7 @@ import numpy as np
 
 from .audio_device import PlayResult, play, select_device
 from .config import Config
-from .serial_io import Board, RawCapture, TrialAbort, open_board
+from .serial_io import Board, RawCapture, open_board
 
 INDEX_FIELDS = (
     "session_id",
@@ -183,7 +183,7 @@ def run_session(cfg: Config, board: Board | None = None, play_fn=play) -> None:
         for path, meta in list_trials(cfg.audio_root):
             try:
                 run_trial(path, meta, cfg, board, device, session_id, play_fn=play_fn)
-            except TrialAbort as exc:
+            except Exception as exc:
                 print(f"abort {path}: {exc}")
     finally:
         if close_board:

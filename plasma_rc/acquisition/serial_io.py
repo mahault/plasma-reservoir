@@ -13,6 +13,7 @@ HEADER_STRUCT = struct.Struct("<HIIH")  # magic, block_seq, t_start_us, n_sample
 MAGIC = 0xAA55
 MAGIC_BYTES = b"\x55\xaa"
 HANDSHAKE_TIMEOUT_S = 2.0
+READER_JOIN_TIMEOUT_S = HANDSHAKE_TIMEOUT_S * 2 + 1.0
 _SAMPLE_STRUCT = struct.Struct("<HH")
 
 
@@ -130,6 +131,7 @@ class Board:
         self._stop_event = threading.Event()
 
     def sync(self) -> int:
+        self._halt_reader()
         self._frames.clear()
         self._abort = None
         self._stopped = None
@@ -147,8 +149,7 @@ class Board:
     def stop(self) -> RawCapture:
         self._ser.write(b"STOP\n")
         self._stop_event.set()
-        if self._reader is not None:
-            self._reader.join(timeout=HANDSHAKE_TIMEOUT_S + 1.0)
+        self._join_reader()
         if self._abort:
             raise TrialAbort(self._abort)
         if self._stopped is None:
@@ -157,9 +158,30 @@ class Board:
         return self._assemble(dropped, frames_sent)
 
     def close(self) -> None:
+        try:
+            self._halt_reader()
+        except Exception:
+            pass
         close = getattr(self._ser, "close", None)
         if close is not None:
             close()
+
+    def _halt_reader(self) -> None:
+        reader = self._reader
+        if reader is not None and reader.is_alive() and not self._stop_event.is_set():
+            self._ser.write(b"STOP\n")
+            self._stop_event.set()
+        self._join_reader()
+
+    def _join_reader(self) -> None:
+        reader = self._reader
+        if reader is None:
+            return
+        if reader.is_alive():
+            reader.join(timeout=READER_JOIN_TIMEOUT_S)
+            if reader.is_alive():
+                raise TrialAbort("capture reader still running")
+        self._reader = None
 
     def _read_loop(self) -> None:
         try:

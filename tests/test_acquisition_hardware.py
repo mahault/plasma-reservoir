@@ -154,6 +154,60 @@ def test_block_seq_gap_aborts_trial():
     board.close()
 
 
+def test_sync_joins_previous_reader_before_starting_next():
+    board = _board(FakeSerial())
+    board.sync()
+    first = board._reader
+    assert first is not None and first.is_alive()
+    board.sync()
+    second = board._reader
+    assert not first.is_alive()
+    assert second is not None and second is not first
+    assert second.is_alive()
+    board.stop()
+    board.close()
+
+
+def test_sync_does_not_start_reader_if_previous_still_running(monkeypatch):
+    import plasma_rc.acquisition.serial_io as serial_io
+
+    monkeypatch.setattr(serial_io, "READER_JOIN_TIMEOUT_S", 0.05)
+    board = _board(FakeSerial())
+    hold = threading.Event()
+    stuck = threading.Thread(target=hold.wait, daemon=True)
+    stuck.start()
+    board._reader = stuck
+    try:
+        with pytest.raises(TrialAbort, match="still running"):
+            board.sync()
+        assert stuck.is_alive()
+        assert board._reader is stuck
+    finally:
+        hold.set()
+        stuck.join()
+        board.close()
+
+
+def test_stop_raises_if_reader_does_not_exit(monkeypatch):
+    import plasma_rc.acquisition.serial_io as serial_io
+
+    monkeypatch.setattr(serial_io, "READER_JOIN_TIMEOUT_S", 0.05)
+    board = _board(FakeSerial())
+    hold = threading.Event()
+    stuck = threading.Thread(target=hold.wait, daemon=True)
+    stuck.start()
+    board._reader = stuck
+    try:
+        with pytest.raises(TrialAbort, match="still running"):
+            board.stop()
+        assert stuck.is_alive()
+        assert board._reader is stuck
+    finally:
+        hold.set()
+        stuck.join()
+        board.close()
+
+
 def test_trial_loop_writes_npz(tmp_path: Path):
     cfg = load_config(DEFAULT_YAML)
     cfg.pre_roll_s = 0.0
@@ -202,10 +256,42 @@ def test_play_failure_still_sends_stop(tmp_path: Path):
 
     assert "START\n" in fake.writes
     assert "STOP\n" in fake.writes
-    assert board._reader is not None
-    assert not board._reader.is_alive()
+    assert board._reader is None
     assert list((cfg.out_dir / "raw").rglob("*.npz")) == []
     assert not (cfg.out_dir / "index.csv").exists()
+    board.close()
+
+
+def test_play_failure_skips_trial_and_continues(tmp_path: Path, capsys):
+    cfg = load_config(DEFAULT_YAML)
+    cfg.pre_roll_s = 0.0
+    cfg.post_roll_s = 0.0
+    cfg.out_dir = tmp_path / "out"
+    cfg.audio_device = 0
+    audio_root = tmp_path / "data" / "Data"
+    bad = audio_root / "same word" / "50" / "sami" / "a1.mp3"
+    good = audio_root / "same word" / "50" / "sami" / "a2.mp3"
+    bad.parent.mkdir(parents=True)
+    bad.write_bytes(b"")
+    good.write_bytes(b"")
+    cfg.audio_root = audio_root
+    fake = FakeSerial(n_frames=2)
+    board = _board(fake)
+
+    def play_some(path, _device):
+        if path.name == "a1.mp3":
+            raise RuntimeError("decode failed")
+        return PlayResult(1.0, 1.05, 0.05, 0.05, 0.0)
+
+    run_session(cfg, board=board, play_fn=play_some)
+    npz = list((cfg.out_dir / "raw").rglob("*.npz"))
+    assert [p.name for p in npz] == ["a2.npz"]
+    index = (cfg.out_dir / "index.csv").read_text(encoding="utf-8")
+    assert "a2" in index and "a1" not in index
+    assert fake.writes.count("START\n") == 2
+    assert fake.writes.count("STOP\n") == 2
+    out = capsys.readouterr().out
+    assert "abort" in out and "decode failed" in out
     board.close()
 
 

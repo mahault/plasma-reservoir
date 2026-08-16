@@ -67,7 +67,7 @@ For `different word/banana/Sami/b3.mp3`:
 
 Same-word files (`same word/75/majesty/a12.mp3`) work the same way; `label` is the volume (`75`) instead of the word.
 
-If a frame has a bad CRC or a missing `block_seq`, that trial is discarded (no npz, no index row) and the next mp3 runs.
+If a trial fails (bad CRC, `block_seq` gap, or audio decode/play error), it is discarded (no npz, no index row) and the next mp3 runs.
 
 ### USB frames
 
@@ -122,7 +122,7 @@ python -m plasma_rc.acquisition --config /path/to/config.yaml --port /dev/ttyACM
 - `out_dir/raw/<speaker>/<condition>/<label>/<stem>.npz` — arrays `t_us`, `audio_in`, `brightness` and scalar `fs_hz`
 - `out_dir/index.csv` — one row per successful trial
 
-A trial with a bad CRC or `block_seq` gap is aborted: nothing is written for that file, then the next mp3 runs.
+A failed trial (bad CRC, `block_seq` gap, or audio decode/play error) is aborted: nothing is written for that file, then the next mp3 runs.
 
 ## Hardware
 
