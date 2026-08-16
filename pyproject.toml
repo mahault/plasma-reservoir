@@ -13,9 +13,19 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-cov"]
+acquisition = [
+    "pyserial>=3.5",
+    "sounddevice>=0.4",
+    "soundfile>=0.12",
+    "pyyaml>=6.0",
+    "pydub>=0.25",
+]
 
 [tool.setuptools.packages.find]
 include = ["plasma_rc*"]
+
+[tool.setuptools.package-data]
+"plasma_rc.acquisition" = ["config.yaml"]
 
 [build-system]
 requires = ["setuptools>=68.0"]

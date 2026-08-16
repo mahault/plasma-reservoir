@@ -5,3 +5,9 @@ __pycache__/
 dist/
 build/
 *.png
+./plasma_rc/acquisition/plasma_pipeline_technical_plan_v3_teensy.md
+data/Data/
+data/out/
+plasma_rc/acquisition/plasma_pipeline_technical_plan_v3_teensy.md
+artifacts/
+tests/fixtures/
