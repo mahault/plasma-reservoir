@@ -134,10 +134,12 @@ def run_trial(
     play_fn=play,
 ) -> None:
     offset_us = board.sync()
-    time.sleep(cfg.pre_roll_s)
-    result: PlayResult = play_fn(path, device)
-    time.sleep(cfg.post_roll_s)
-    capture = board.stop()
+    try:
+        time.sleep(cfg.pre_roll_s)
+        result: PlayResult = play_fn(path, device)
+        time.sleep(cfg.post_roll_s)
+    finally:
+        capture = board.stop()
     duration_s = cfg.pre_roll_s + result.true_duration_s + cfg.post_roll_s
     expected = cfg.fs_hz * duration_s
     if expected and abs(len(capture.brightness) - expected) / expected > 0.01:

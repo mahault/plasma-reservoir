@@ -179,6 +179,36 @@ def test_trial_loop_writes_npz(tmp_path: Path):
     board.close()
 
 
+def test_play_failure_still_sends_stop(tmp_path: Path):
+    cfg = load_config(DEFAULT_YAML)
+    cfg.pre_roll_s = 0.0
+    cfg.post_roll_s = 0.0
+    cfg.out_dir = tmp_path / "out"
+    cfg.audio_device = 0
+    audio_root = tmp_path / "data" / "Data"
+    path = audio_root / "same word" / "50" / "sami" / "a1.mp3"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"")
+    meta = parse_audio_path(path, audio_root)
+    assert meta is not None
+    fake = FakeSerial(n_frames=2)
+    board = _board(fake)
+
+    def boom(_path, _device):
+        raise RuntimeError("decode failed")
+
+    with pytest.raises(RuntimeError, match="decode failed"):
+        run_trial(path, meta, cfg, board, 0, "20260816T000000Z", play_fn=boom)
+
+    assert "START\n" in fake.writes
+    assert "STOP\n" in fake.writes
+    assert board._reader is not None
+    assert not board._reader.is_alive()
+    assert list((cfg.out_dir / "raw").rglob("*.npz")) == []
+    assert not (cfg.out_dir / "index.csv").exists()
+    board.close()
+
+
 def test_aborted_trial_writes_nothing(tmp_path: Path):
     cfg = load_config(DEFAULT_YAML)
     cfg.pre_roll_s = 0.0
