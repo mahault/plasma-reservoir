@@ -71,19 +71,19 @@ def persist_audio_device(cfg: Config, index: int) -> None:
     cfg.audio_device = index
 
 
-def _as_optional_str(value: Any) -> str | None:
+def _as_optional_str(name: str, value: Any) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):
         return value
-    raise ConfigError("port must be a string or null")
+    raise ConfigError(f"{name} must be a string or null")
 
 
-def _as_optional_int(value: Any) -> int | None:
+def _as_optional_int(name: str, value: Any) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ConfigError("audio_device must be an int or null")
+        raise ConfigError(f"{name} must be an int or null")
     return value
 
 
@@ -106,12 +106,12 @@ def _validate(raw: dict, cfg_path: Path) -> Config:
     cwd = Path.cwd()
     return Config(
         board=str(raw["board"]),
-        port=_as_optional_str(raw["port"]),
+        port=_as_optional_str("port", raw["port"]),
         fs_hz=_as_positive_int("fs_hz", raw["fs_hz"]),
         adc_bits=adc_bits,
         pre_roll_s=_as_non_negative_float("pre_roll_s", raw["pre_roll_s"]),
         post_roll_s=_as_non_negative_float("post_roll_s", raw["post_roll_s"]),
-        audio_device=_as_optional_int(raw["audio_device"]),
+        audio_device=_as_optional_int("audio_device", raw["audio_device"]),
         audio_root=(cwd / str(raw["audio_root"])).resolve(),
         out_dir=(cwd / str(raw["out_dir"])).resolve(),
         path=cfg_path.resolve(),

@@ -33,7 +33,8 @@ def main() -> None:
     all_states = []
     for t in trials:
         signal, states = loader.load_trial(t["word"], t["volume_pct"], t["trial_id"])
-        first_signal = signal if first_signal is None else first_signal
+        if first_signal is None:
+            first_signal = signal
         key = f"{t['word']}_{t['volume_pct']}"
         grouped.setdefault(key, []).append(states)
         all_states.append(states)
@@ -43,7 +44,7 @@ def main() -> None:
     mc, mc_per_delay = memory_capacity(stacked[: len(first_signal)], first_signal, max_delay=max_delay)
     n_dims, cumvar = effective_dimensionality(stacked)
 
-    class_data = {k: np.stack(v, axis=0) for k, v in grouped.items() if len(v) >= 1}
+    class_data = {k: np.stack(v, axis=0) for k, v in grouped.items()}
     sep, labels = separation_matrix(class_data)
 
     fig1 = plt.figure(figsize=(7, 4))

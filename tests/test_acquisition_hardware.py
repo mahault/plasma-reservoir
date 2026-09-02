@@ -29,6 +29,7 @@ class FakeSerial:
         n_frames: int = 4,
         bad_crc: bool = False,
         gap: bool = False,
+        bad_sample_count: bool = False,
     ):
         self._buf = bytearray()
         self._lock = threading.Lock()
@@ -37,6 +38,7 @@ class FakeSerial:
         self.n_frames = n_frames
         self.bad_crc = bad_crc
         self.gap = gap
+        self.bad_sample_count = bad_sample_count
         self.closed = False
 
     @property
@@ -93,8 +95,9 @@ class FakeSerial:
         for i in range(self.n_frames):
             seq = i + 1 if (self.gap and i >= 2) else i
             t0 = 1000 + i * n * 10
-            bright = np.full(n, 800, dtype=np.uint16)
-            audio = np.full(n, 2048, dtype=np.uint16)
+            frame_n = 32 if (self.bad_sample_count and i == 1) else n
+            bright = np.full(frame_n, 800, dtype=np.uint16)
+            audio = np.full(frame_n, 2048, dtype=np.uint16)
             frame = bytearray(build_frame(seq, t0, bright, audio))
             if self.bad_crc and i == 1:
                 frame[-1] ^= 0xFF
@@ -140,6 +143,14 @@ def test_stream_length_and_t_us():
 
 def test_bad_crc_aborts_trial():
     board = _board(FakeSerial(bad_crc=True))
+    board.sync()
+    with pytest.raises(TrialAbort, match="CRC"):
+        board.stop()
+    board.close()
+
+
+def test_wrong_sample_count_aborts_trial():
+    board = _board(FakeSerial(bad_sample_count=True))
     board.sync()
     with pytest.raises(TrialAbort, match="CRC"):
         board.stop()
@@ -292,6 +303,37 @@ def test_play_failure_skips_trial_and_continues(tmp_path: Path, capsys):
     assert fake.writes.count("STOP\n") == 2
     out = capsys.readouterr().out
     assert "abort" in out and "decode failed" in out
+    board.close()
+
+
+def test_run_session_returns_summary(tmp_path: Path, capsys):
+    cfg = load_config(DEFAULT_YAML)
+    cfg.pre_roll_s = 0.0
+    cfg.post_roll_s = 0.0
+    cfg.out_dir = tmp_path / "out"
+    cfg.audio_device = 0
+    audio_root = tmp_path / "data" / "Data"
+    bad = audio_root / "same word" / "50" / "sami" / "a1.mp3"
+    good = audio_root / "same word" / "50" / "sami" / "a2.mp3"
+    bad.parent.mkdir(parents=True)
+    bad.write_bytes(b"")
+    good.write_bytes(b"")
+    cfg.audio_root = audio_root
+    fake = FakeSerial(n_frames=2)
+    board = _board(fake)
+
+    def play_some(path, _device):
+        if path.name == "a1.mp3":
+            raise RuntimeError("decode failed")
+        return PlayResult(1.0, 1.05, 0.05, 0.05, 0.0)
+
+    summary = run_session(cfg, board=board, play_fn=play_some)
+    assert summary.attempted == 2
+    assert summary.succeeded == 1
+    assert summary.aborted == 1
+    assert [p.name for p in summary.aborted_paths] == ["a1.mp3"]
+    out = capsys.readouterr().out
+    assert "1/2" in out and "aborted=1" in out
     board.close()
 
 

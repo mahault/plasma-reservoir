@@ -37,6 +37,9 @@ INDEX_FIELDS = (
 _NAME_RE = re.compile(r"^[abo]?(\d+)\.mp3$", re.IGNORECASE)
 _VOLUME = {"50", "75", "100"}
 _WORDS = {"apple", "banana", "orange"}
+_SILENCE_RE = re.compile(r"^s(\d+)\.wav$", re.IGNORECASE)
+_NOISE_RE = re.compile(r"^n(\d+)\.wav$", re.IGNORECASE)
+_FSDD_RE = re.compile(r"^([0-9])_([A-Za-z]+)_(\d+)\.wav$")
 
 
 @dataclass
@@ -49,31 +52,82 @@ class TrialMeta:
     stem: str
 
 
+def _parse_same_word(parts: tuple[str, ...]) -> tuple[str, str, str, int] | None:
+    if len(parts) != 4:
+        return None
+    _, volume, speaker_dir, name = parts
+    match = _NAME_RE.match(name)
+    if match is None or volume not in _VOLUME:
+        return None
+    return speaker_dir.lower(), "same_word", volume, int(match.group(1))
+
+
+def _parse_different_word(parts: tuple[str, ...]) -> tuple[str, str, str, int] | None:
+    if len(parts) != 4:
+        return None
+    _, word, speaker_dir, name = parts
+    match = _NAME_RE.match(name)
+    word = word.lower()
+    if match is None or word not in _WORDS:
+        return None
+    return speaker_dir.lower(), "different_word", word, int(match.group(1))
+
+
+def _parse_silence(parts: tuple[str, ...]) -> tuple[str, str, str, int] | None:
+    if len(parts) != 2:
+        return None
+    _, name = parts
+    match = _SILENCE_RE.match(name)
+    if match is None:
+        return None
+    return "na", "silence", "silence", int(match.group(1))
+
+
+def _parse_noise(parts: tuple[str, ...]) -> tuple[str, str, str, int] | None:
+    if len(parts) != 2:
+        return None
+    _, name = parts
+    match = _NOISE_RE.match(name)
+    if match is None:
+        return None
+    return "na", "noise", "white_noise", int(match.group(1))
+
+
+def _parse_fsdd(parts: tuple[str, ...]) -> tuple[str, str, str, int] | None:
+    if len(parts) != 2:
+        return None
+    _, name = parts
+    match = _FSDD_RE.match(name)
+    if match is None:
+        return None
+    digit, speaker, index = match.groups()
+    return speaker.lower(), "fsdd", digit, int(index)
+
+
+_DATASET_PARSERS = {
+    "same word": _parse_same_word,
+    "different word": _parse_different_word,
+    "silence": _parse_silence,
+    "noise": _parse_noise,
+    "fsdd": _parse_fsdd,
+}
+
+
 def parse_audio_path(path: Path, audio_root: Path) -> TrialMeta | None:
     try:
         rel = path.resolve().relative_to(audio_root.resolve())
     except ValueError:
         return None
     parts = rel.parts
-    if len(parts) != 4:
+    if not parts:
         return None
-    top, mid, speaker_dir, name = parts
-    match = _NAME_RE.match(name)
-    if match is None:
+    parser = _DATASET_PARSERS.get(parts[0])
+    if parser is None:
         return None
-    sample_index = int(match.group(1))
-    speaker = speaker_dir.lower()
-    if top == "same word":
-        if mid not in _VOLUME:
-            return None
-        condition, label = "same_word", mid
-    elif top == "different word":
-        word = mid.lower()
-        if word not in _WORDS:
-            return None
-        condition, label = "different_word", word
-    else:
+    parsed = parser(parts)
+    if parsed is None:
         return None
+    speaker, condition, label, sample_index = parsed
     return TrialMeta(
         speaker=speaker,
         condition=condition,
@@ -84,9 +138,13 @@ def parse_audio_path(path: Path, audio_root: Path) -> TrialMeta | None:
     )
 
 
+_AUDIO_EXTENSIONS = ("*.mp3", "*.wav")
+
+
 def list_trials(audio_root: Path) -> list[tuple[Path, TrialMeta]]:
     trials = []
-    for path in sorted(audio_root.rglob("*.mp3")):
+    paths = sorted(p for ext in _AUDIO_EXTENSIONS for p in audio_root.rglob(ext))
+    for path in paths:
         meta = parse_audio_path(path, audio_root)
         if meta is None:
             print(f"skip {path}")
@@ -172,19 +230,39 @@ def run_trial(
     )
 
 
-def run_session(cfg: Config, board: Board | None = None, play_fn=play) -> None:
+@dataclass
+class SessionSummary:
+    attempted: int
+    succeeded: int
+    aborted: int
+    aborted_paths: list[Path]
+
+
+def run_session(cfg: Config, board: Board | None = None, play_fn=play) -> SessionSummary:
     device = select_device(cfg)
     session_id = utc_session_id()
     close_board = False
     if board is None:
         board = open_board(cfg.port, cfg.fs_hz, cfg.adc_bits)
         close_board = True
+    attempted = 0
+    aborted_paths: list[Path] = []
     try:
         for path, meta in list_trials(cfg.audio_root):
+            attempted += 1
             try:
                 run_trial(path, meta, cfg, board, device, session_id, play_fn=play_fn)
             except Exception as exc:
                 print(f"abort {path}: {exc}")
+                aborted_paths.append(path)
     finally:
         if close_board:
             board.close()
+    succeeded = attempted - len(aborted_paths)
+    print(f"session {session_id}: {succeeded}/{attempted} succeeded, aborted={len(aborted_paths)}")
+    return SessionSummary(
+        attempted=attempted,
+        succeeded=succeeded,
+        aborted=len(aborted_paths),
+        aborted_paths=aborted_paths,
+    )

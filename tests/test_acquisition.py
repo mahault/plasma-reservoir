@@ -10,14 +10,20 @@ yaml = pytest.importorskip("yaml")
 from plasma_rc.acquisition.audio_device import decode
 from plasma_rc.acquisition.cli import main
 from plasma_rc.acquisition.config import ConfigError, load_config, persist_audio_device
-from plasma_rc.acquisition.serial_io import FRAME_N_SAMPLES, build_frame, crc16_ccitt, parse_frame
+from plasma_rc.acquisition.serial_io import (
+    FRAME_N_SAMPLES,
+    RawCapture,
+    build_frame,
+    crc16_ccitt,
+    parse_frame,
+)
 from plasma_rc.acquisition.session import (
     append_index_row,
+    list_trials,
     parse_audio_path,
     raw_path,
     write_npz,
 )
-from plasma_rc.acquisition.serial_io import RawCapture
 
 
 DEFAULT_YAML = Path(__file__).resolve().parents[1] / "plasma_rc" / "acquisition" / "config.yaml"
@@ -87,6 +93,17 @@ def test_parse_frame_bad_crc():
     assert parse_frame(_sample_frame(flip=True)) is None
 
 
+def test_parse_frame_rejects_wrong_sample_count():
+    # Valid CRC over a well-formed 32-sample frame -- but the protocol only
+    # ever sends fixed FRAME_N_SAMPLES blocks, so a mismatched count (e.g.
+    # from a corrupted header field) must be rejected, not trusted.
+    n = 32
+    bright = np.arange(n, dtype=np.uint16)
+    audio = np.full(n, 2048, dtype=np.uint16)
+    buf = build_frame(0, 1000, bright, audio)
+    assert parse_frame(buf) is None
+
+
 def test_parse_same_word_path(tmp_path: Path):
     audio_root = tmp_path / "data" / "Data"
     path = audio_root / "same word" / "75" / "Majesty" / "a12.mp3"
@@ -111,6 +128,82 @@ def test_parse_different_word_path(tmp_path: Path):
     assert meta.condition == "different_word"
     assert meta.label == "banana"
     assert meta.sample_index == 3
+
+
+def test_parse_silence_path(tmp_path: Path):
+    audio_root = tmp_path / "data" / "Data"
+    path = audio_root / "silence" / "s01.wav"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"")
+    meta = parse_audio_path(path, audio_root)
+    assert meta is not None
+    assert meta.speaker == "na"
+    assert meta.condition == "silence"
+    assert meta.label == "silence"
+    assert meta.sample_index == 1
+
+
+def test_skip_bad_silence_filename(tmp_path: Path):
+    audio_root = tmp_path / "data" / "Data"
+    path = audio_root / "silence" / "notes.txt"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"")
+    assert parse_audio_path(path, audio_root) is None
+
+
+def test_parse_noise_path(tmp_path: Path):
+    audio_root = tmp_path / "data" / "Data"
+    path = audio_root / "noise" / "n03.wav"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"")
+    meta = parse_audio_path(path, audio_root)
+    assert meta is not None
+    assert meta.speaker == "na"
+    assert meta.condition == "noise"
+    assert meta.label == "white_noise"
+    assert meta.sample_index == 3
+
+
+def test_skip_bad_noise_filename(tmp_path: Path):
+    audio_root = tmp_path / "data" / "Data"
+    path = audio_root / "noise" / "notes.txt"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"")
+    assert parse_audio_path(path, audio_root) is None
+
+
+def test_parse_fsdd_path(tmp_path: Path):
+    audio_root = tmp_path / "data" / "Data"
+    path = audio_root / "fsdd" / "7_jackson_32.wav"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"")
+    meta = parse_audio_path(path, audio_root)
+    assert meta is not None
+    assert meta.speaker == "jackson"
+    assert meta.condition == "fsdd"
+    assert meta.label == "7"
+    assert meta.sample_index == 32
+
+
+def test_skip_bad_fsdd_filename(tmp_path: Path):
+    audio_root = tmp_path / "data" / "Data"
+    path = audio_root / "fsdd" / "notes.txt"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"")
+    assert parse_audio_path(path, audio_root) is None
+
+
+def test_list_trials_discovers_wav_dataset_kinds(tmp_path: Path):
+    audio_root = tmp_path / "data" / "Data"
+    mp3_path = audio_root / "same word" / "75" / "sami" / "a1.mp3"
+    wav_path = audio_root / "silence" / "s01.wav"
+    mp3_path.parent.mkdir(parents=True)
+    wav_path.parent.mkdir(parents=True)
+    mp3_path.write_bytes(b"")
+    wav_path.write_bytes(b"")
+    trials = list_trials(audio_root)
+    conditions = {meta.condition for _, meta in trials}
+    assert conditions == {"same_word", "silence"}
 
 
 def test_skip_bad_filename(tmp_path: Path):

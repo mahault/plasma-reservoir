@@ -5,6 +5,7 @@ from __future__ import annotations
 import struct
 import threading
 import time
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -21,36 +22,24 @@ class TrialAbort(Exception):
     pass
 
 
+@dataclass(slots=True)
 class Frame:
-    __slots__ = ("block_seq", "t_start_us", "n_samples", "brightness", "audio")
-
-    def __init__(self, block_seq, t_start_us, n_samples, brightness, audio):
-        self.block_seq = block_seq
-        self.t_start_us = t_start_us
-        self.n_samples = n_samples
-        self.brightness = brightness
-        self.audio = audio
+    block_seq: int
+    t_start_us: int
+    n_samples: int
+    brightness: np.ndarray
+    audio: np.ndarray
 
 
+@dataclass(slots=True)
 class RawCapture:
-    __slots__ = (
-        "t_us",
-        "audio_in",
-        "brightness",
-        "dropped",
-        "frames_sent",
-        "sync_offset_us",
-        "fs_hz",
-    )
-
-    def __init__(self, t_us, audio_in, brightness, dropped, frames_sent, sync_offset_us, fs_hz):
-        self.t_us = t_us
-        self.audio_in = audio_in
-        self.brightness = brightness
-        self.dropped = dropped
-        self.frames_sent = frames_sent
-        self.sync_offset_us = sync_offset_us
-        self.fs_hz = fs_hz
+    t_us: np.ndarray
+    audio_in: np.ndarray
+    brightness: np.ndarray
+    dropped: int
+    frames_sent: int
+    sync_offset_us: int
+    fs_hz: int
 
 
 def crc16_ccitt(data: bytes) -> int:
@@ -87,6 +76,8 @@ def parse_frame(buf: bytes) -> Frame | None:
     magic, block_seq, t_start_us, n_samples = HEADER_STRUCT.unpack_from(buf, 0)
     if magic != MAGIC:
         return None
+    if n_samples != FRAME_N_SAMPLES:
+        return None
     expected = HEADER_STRUCT.size + 4 * n_samples + 2
     if len(buf) != expected:
         return None
@@ -94,12 +85,11 @@ def parse_frame(buf: bytes) -> Frame | None:
     crc_recv = struct.unpack_from("<H", buf, len(buf) - 2)[0]
     if crc16_ccitt(body) != crc_recv:
         return None
-    brightness = np.empty(n_samples, dtype=np.uint16)
-    audio = np.empty(n_samples, dtype=np.uint16)
-    offset = HEADER_STRUCT.size
-    for i in range(n_samples):
-        brightness[i], audio[i] = _SAMPLE_STRUCT.unpack_from(buf, offset)
-        offset += 4
+    pairs = np.frombuffer(
+        buf, dtype="<u2", count=2 * n_samples, offset=HEADER_STRUCT.size
+    ).reshape(n_samples, 2)
+    brightness = pairs[:, 0].copy()
+    audio = pairs[:, 1].copy()
     return Frame(block_seq, t_start_us, n_samples, brightness, audio)
 
 
@@ -199,7 +189,7 @@ class Board:
             chunk = self._ser.read(waiting)
             if chunk:
                 buf.extend(chunk)
-                buf = bytearray(self._consume(bytes(buf)))
+                buf = self._consume(buf)
             if self._stop_event.is_set():
                 if deadline is None:
                     deadline = time.perf_counter() + HANDSHAKE_TIMEOUT_S
@@ -210,7 +200,7 @@ class Board:
             if not chunk:
                 time.sleep(0.001)
 
-    def _consume(self, data: bytes) -> bytes:
+    def _consume(self, data: bytearray) -> bytearray:
         pos = 0
         n = len(data)
         while pos < n:
@@ -244,7 +234,7 @@ class Board:
                 )
             self._frames.append(frame)
             pos += frame_len
-        return b""
+        return bytearray()
 
     def _assemble(self, dropped: int, frames_sent: int) -> RawCapture:
         if not self._frames:
@@ -274,24 +264,22 @@ class Board:
 
 
 def open_board(port: str | None, expected_fs: int, expected_adc_bits: int, ser=None) -> Board:
-    if ser is None:
-        serial = _import_serial()
-        if port is None:
-            ser = _autodetect(serial, expected_fs, expected_adc_bits)
-            fw, fs_hz, adc_bits = _last_pong
-            return Board(ser, fs_hz, adc_bits, fw)
-        ser = serial.Serial(port, timeout=HANDSHAKE_TIMEOUT_S)
-        try:
-            fw, fs_hz, adc_bits = _handshake(ser, expected_fs, expected_adc_bits)
-        except Exception:
-            ser.close()
-            raise
+    def finish(ser) -> Board:
+        fw, fs_hz, adc_bits = _handshake(ser, expected_fs, expected_adc_bits)
         return Board(ser, fs_hz, adc_bits, fw)
-    fw, fs_hz, adc_bits = _handshake(ser, expected_fs, expected_adc_bits)
-    return Board(ser, fs_hz, adc_bits, fw)
 
-
-_last_pong: tuple[str, int, int] = ("", 0, 0)
+    if ser is not None:
+        return finish(ser)
+    serial = _import_serial()
+    if port is None:
+        ser, fw, fs_hz, adc_bits = _autodetect(serial, expected_fs, expected_adc_bits)
+        return Board(ser, fs_hz, adc_bits, fw)
+    ser = serial.Serial(port, timeout=HANDSHAKE_TIMEOUT_S)
+    try:
+        return finish(ser)
+    except Exception:
+        ser.close()
+        raise
 
 
 def _import_serial():
@@ -321,7 +309,6 @@ def _handshake(ser, expected_fs: int, expected_adc_bits: int) -> tuple[str, int,
 
 
 def _autodetect(serial, expected_fs: int, expected_adc_bits: int):
-    global _last_pong
     last_err: Exception | None = None
     for info in serial.tools.list_ports.comports():
         try:
@@ -330,8 +317,8 @@ def _autodetect(serial, expected_fs: int, expected_adc_bits: int):
             last_err = exc
             continue
         try:
-            _last_pong = _handshake(ser, expected_fs, expected_adc_bits)
-            return ser
+            fw, fs_hz, adc_bits = _handshake(ser, expected_fs, expected_adc_bits)
+            return ser, fw, fs_hz, adc_bits
         except Exception as exc:  # noqa: BLE001
             last_err = exc
             ser.close()
