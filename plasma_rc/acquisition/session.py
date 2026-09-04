@@ -40,6 +40,7 @@ _WORDS = {"apple", "banana", "orange"}
 _SILENCE_RE = re.compile(r"^s(\d+)\.wav$", re.IGNORECASE)
 _NOISE_RE = re.compile(r"^n(\d+)\.wav$", re.IGNORECASE)
 _FSDD_RE = re.compile(r"^([0-9])_([A-Za-z]+)_(\d+)\.wav$")
+_CONSISTENCY_RE = re.compile(r"^r(\d+)\.wav$", re.IGNORECASE)
 
 
 @dataclass
@@ -104,12 +105,23 @@ def _parse_fsdd(parts: tuple[str, ...]) -> tuple[str, str, str, int] | None:
     return speaker.lower(), "fsdd", digit, int(index)
 
 
+def _parse_consistency(parts: tuple[str, ...]) -> tuple[str, str, str, int] | None:
+    if len(parts) != 3:
+        return None
+    _, stimulus_name, name = parts
+    match = _CONSISTENCY_RE.match(name)
+    if match is None:
+        return None
+    return "na", "consistency", stimulus_name, int(match.group(1))
+
+
 _DATASET_PARSERS = {
     "same word": _parse_same_word,
     "different word": _parse_different_word,
     "silence": _parse_silence,
     "noise": _parse_noise,
     "fsdd": _parse_fsdd,
+    "consistency": _parse_consistency,
 }
 
 

@@ -193,6 +193,27 @@ def test_skip_bad_fsdd_filename(tmp_path: Path):
     assert parse_audio_path(path, audio_root) is None
 
 
+def test_parse_consistency_path(tmp_path: Path):
+    audio_root = tmp_path / "data" / "Data"
+    path = audio_root / "consistency" / "noise_repeat" / "r03.wav"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"")
+    meta = parse_audio_path(path, audio_root)
+    assert meta is not None
+    assert meta.speaker == "na"
+    assert meta.condition == "consistency"
+    assert meta.label == "noise_repeat"
+    assert meta.sample_index == 3
+
+
+def test_skip_bad_consistency_filename(tmp_path: Path):
+    audio_root = tmp_path / "data" / "Data"
+    path = audio_root / "consistency" / "noise_repeat" / "notes.txt"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"")
+    assert parse_audio_path(path, audio_root) is None
+
+
 def test_list_trials_discovers_wav_dataset_kinds(tmp_path: Path):
     audio_root = tmp_path / "data" / "Data"
     mp3_path = audio_root / "same word" / "75" / "sami" / "a1.mp3"
