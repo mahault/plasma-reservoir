@@ -25,8 +25,10 @@ class PlasmaDigitalTwin(Reservoir):
     for benchmarking and Bayesian readout training.
     """
 
-    def __init__(self, noise_scale: float = 0.01):
+    def __init__(self, noise_scale: float = 0.01, seed: int | None = None):
         self.noise_scale = noise_scale
+        self._rng = np.random.default_rng(seed)
+        self._seed = seed
         self._gp: GaussianProcessRegressor | None = None
         self._baseline_state = np.zeros(3)
         self._history: list[float] = []
@@ -40,13 +42,18 @@ class PlasmaDigitalTwin(Reservoir):
         inputs : (N,) or (N, memory_len) voltage inputs
         states : (N, 3) baseline-subtracted reservoir states
         """
+        inputs, states = np.asarray(inputs), np.asarray(states)
+        if inputs.ndim not in (1,2) or states.shape != (len(inputs),3) or not np.isfinite(inputs).all() or not np.isfinite(states).all():
+            raise ValueError("expected finite aligned inputs and (N,3) states")
+        if len(inputs) < self._memory_len or (inputs.ndim == 2 and inputs.shape[1] != self._memory_len):
+            raise ValueError("inputs must contain a complete memory window")
         kernel = RBF(length_scale=1.0) + WhiteKernel(noise_level=0.1)
-        self._gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=5)
+        self._gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=5, random_state=self._seed)
 
         # If inputs are 1D, create memory-augmented features
         if inputs.ndim == 1:
             inputs = self._build_memory_features(inputs)
-            states = states[self._memory_len:]
+            states = states[self._memory_len - 1:]
 
         self._gp.fit(inputs, states)
 
@@ -61,7 +68,7 @@ class PlasmaDigitalTwin(Reservoir):
             return ReservoirState(0.0, 0.0, 0.0)
         x = np.array(self._history[-self._memory_len:]).reshape(1, -1)
         mean, std = self._gp.predict(x, return_std=True)
-        state = mean[0] + np.random.randn(3) * std[0] * self.noise_scale
+        state = mean[0] + self._rng.standard_normal(3) * std[0] * self.noise_scale
         return ReservoirState(
             intensity=state[0], frequency=state[1], oscillation=state[2]
         )
@@ -70,7 +77,7 @@ class PlasmaDigitalTwin(Reservoir):
         return ReservoirState(0.0, 0.0, 0.0)
 
     def _build_memory_features(self, signal: np.ndarray) -> np.ndarray:
-        n = len(signal) - self._memory_len
+        n = len(signal) - self._memory_len + 1
         features = np.zeros((n, self._memory_len))
         for i in range(n):
             features[i] = signal[i : i + self._memory_len]
