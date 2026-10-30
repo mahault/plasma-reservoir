@@ -19,9 +19,6 @@ artifacts/
 *.png
 docs/*
 !docs/architecture.md
-!docs/mathematics.md
-!docs/review.md
-!docs/hardware.md
 !docs/simulation.md
 !docs/figures/
 docs/figures/*
@@ -29,3 +26,5 @@ docs/figures/*
 !docs/figures/*.png
 !docs/figures/*.py
 plasma_rc/acquisition/plasma_pipeline_technical_plan_v3_teensy.md
+.venv/
+!docs/figures/*.html

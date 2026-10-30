@@ -17,4 +17,4 @@
 | Consistency | Mean pairwise correlation of repeated responses to a common input; undefined for constant traces. |
 | Control | Same measurement/analysis workflow without the nonlinear bulb, or with a resistor replacing it. |
 
-Full equations, units and limitations: [mathematics](docs/mathematics.md).
+Full equations, units and limitations: [system architecture](docs/architecture.md#1-system-overview).
