@@ -17,7 +17,7 @@ The initial audit reviewed circuit-a-pipeline at 3063690. The original master re
 | Largest Lyapunov claim | Relabeled finite-time diagnostic; linear eigenvalue special case tested. |
 | Stale physical-loader tests | Replaced with the preserved raw CSV contract and explicit unimplemented live stub. Legacy timestamps are never used as logged voltage input. |
 
-The combined implementation initially passed 147 tests including ngspice and UNO/simavr; final branch-specific counts are recorded in each branch README. Source setup and dependency isolation are checked with a wheel installed in a fresh environment. No physical hardware was activated.
+The reviewed combined implementation passed 160 tests including ngspice, UNO/simavr and Teensy compilation. Seven new regressions reproduced and fixed four independent-review findings: initial serial loss, mismatched replica drive/provenance, multiprocessing job serialization and fresh output directories. Final branch-specific counts are recorded in each branch README. Source setup and dependency isolation are checked with a wheel installed in a fresh environment. No physical hardware was activated.
 
 Remaining Unknowns: NE-2 delay parameters, stray capacitance, optical transfer, temperature/ageing behavior and actual Teensy timing. Always-on discharge physics is not established by the hysteretic switch. The Teensy firmware plays STEPS/SINE only; D-41's SD/streamed speech playback remains unimplemented. Existing laptop E5 capture is a separate supported path.
 

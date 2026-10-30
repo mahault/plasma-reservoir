@@ -30,7 +30,7 @@ $$C\dot v=(V_{th}-v)/R_{th}+j-i_b,\qquad C_c\dot w=-j.$$
 In the off state, $i_b=0$ and $x=(v,w)^T$ obeys $\dot x=A x+b_0+b_u v_{in}$ with
 
 $$A=\begin{bmatrix}-(1/R_{th}+1/R_e)/C&1/(R_e C)\\1/(R_e C_c)&-1/(R_e C_c)\end{bmatrix},\quad
-b_0=\begin{bmatrix}V_{th}/(R_{th}C)\0\end{bmatrix},\quad
+b_0=\begin{bmatrix}V_{th}/(R_{th}C)\\0\end{bmatrix},\quad
 b_u=\begin{bmatrix}1/(R_e C)\\-1/(R_e C_c)\end{bmatrix}.$$
 
 For positive resistances/capacitances, $\operatorname{tr}A<0$ and $\det A=1/(R_{th}R_e CC_c)>0$, so each off-state linear mode decays. This alone does not prove global stability of the switching stochastic system.
