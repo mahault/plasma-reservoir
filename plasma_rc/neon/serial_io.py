@@ -13,16 +13,16 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass
 
 import numpy as np
+
+from plasma_rc.neon.records import Capture
 
 from .protocol import (
     CPU_HZ,
     EVENT,
     MAGIC,
     SAMPLE,
-    flash_times_s,
     frame_length,
     parse_frame,
     parse_pong,
@@ -37,9 +37,6 @@ RESET_WAIT_S = (
 
 class TrialAbort(RuntimeError):
     pass
-
-
-from plasma_rc.neon.records import Capture
 
 
 class Board:
