@@ -1,7 +1,7 @@
 [project]
 name = "plasma-rc"
 version = "0.1.0"
-description = "Neon reservoir simulation and NARMA-10 experiments"
+description = "Neon reservoir simulation, acquisition and NARMA-10 experiments"
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.24",
@@ -11,6 +11,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-cov"]
+acquisition = ["pyserial>=3.5"]
 
 [tool.setuptools.packages.find]
 include = ["plasma_rc*", "experiments*"]

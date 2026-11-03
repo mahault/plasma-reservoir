@@ -1,1 +1,1 @@
-"""Neon reservoir simulation and analysis."""
+"""Neon reservoir simulation, physical acquisition and analysis."""

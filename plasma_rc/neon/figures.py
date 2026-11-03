@@ -1,4 +1,4 @@
-"""Plots of the recorded simulation outputs."""
+"""Plots of simulation outputs and physical recordings."""
 
 import json
 from pathlib import Path
@@ -17,8 +17,39 @@ def regime_title(run, name):
     return label + " (invalid regime)" if run.get("regime_valid", {}).get(name) is False else label
 
 
-def generate_figures(source, optical, output, pulse):
-    """Save independent explanatory plots from a completed study."""
+def generate_recording_figures(result, output):
+    """Write per-step features, training correlations and held-out scores from an analyzed physical recording."""
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=False)
+    x = np.asarray(result["features"])
+    labels = ("light sensor (V)", "event rate (Hz)", "light variation (V)", "bulb voltage (V)")
+    fig, axes = plt.subplots(4, 1, figsize=(9, 7), sharex=True, layout="constrained")
+    for i, ax in enumerate(axes):
+        ax.plot(x[:, i])
+        ax.set_ylabel(labels[i])
+    axes[-1].set_xlabel("Input step")
+    fig.savefig(output / "features.png", dpi=160)
+    plt.close(fig)
+    corr = np.array([[np.nan if z is None else z for z in row] for row in result["correlations"]])
+    fig, ax = plt.subplots(figsize=(6, 5), layout="constrained")
+    im = ax.imshow(corr, vmin=-1, vmax=1, cmap="coolwarm")
+    ax.set_xticks(range(4), labels, rotation=35)
+    ax.set_yticks(range(4), labels)
+    ax.set_title("Training-set correlations")
+    fig.colorbar(im, ax=ax)
+    fig.savefig(output / "correlation.png", dpi=160)
+    plt.close(fig)
+    scores = result["narma_nmse"]
+    fig, ax = plt.subplots(figsize=(8, 4), layout="constrained")
+    ax.bar(list(scores), list(scores.values()))
+    ax.tick_params(axis="x", rotation=25)
+    ax.set_ylabel("Held-out NARMA-10 NMSE")
+    fig.savefig(output / "narma.png", dpi=160)
+    plt.close(fig)
+
+
+def generate_simulation_figures(source, optical, output, pulse):
+    """Save independent explanatory plots from a completed simulation study."""
     source, optical, output = map(Path, (source, optical, output))
     study = json.loads((source / "summary.json").read_text())
     metrics = json.loads((optical / "summary.json").read_text())
@@ -106,3 +137,10 @@ def generate_figures(source, optical, output, pulse):
     ax.legend()
     fig.savefig(output / "pulse.png", dpi=160)
     plt.close(fig)
+
+
+def generate_figures(*args, **kwargs):
+    """Unified entrypoint dispatching to recording or simulation figures."""
+    if len(args) == 2 or ("result" in kwargs and "output" in kwargs):
+        return generate_recording_figures(*args, **kwargs)
+    return generate_simulation_figures(*args, **kwargs)
