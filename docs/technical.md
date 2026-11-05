@@ -18,14 +18,13 @@ Updated 2026-11-04. IDs in brackets refer to the project decision log; design ba
 
 | Part | Role | Value |
 |---|---|---|
-| HV linear driver | V_D = V_bias + G·x, output resistance Z_o | Unknown; characterized in E0 |
+| HV linear driver | V_D = V_bias + G·x, output resistance Z_o | Unknown; to be measured |
 | R_B | Ballast: sets the operating point, limits source current | Unknown; from §3.6 |
 | NE-2H lamp | Element under test (PART-01: manufacturer open) | CML C2A: 1.9 mA design current, 135 VDC max breakdown in light (**Cited**, research §3) |
 | R_S | Low-side current sense: i_L = v_S/R_S | Small, so R_S·i_L ≪ v_L; Unknown |
-| C_s | Stray capacitance of lamp, wiring, divider, probe | Measured in E0 |
+| C_s | Stray capacitance of lamp, wiring, divider, probe | To be measured |
 | R_d | HV-rated divider and buffer for the node voltage v | Unknown |
-| Photodiode + TIA | Light, no electrical contact | Pole measured in E0 |
-| Teensy 4.1 | 8-bit PWM-DAC (pin 2), 12-bit ADC A0–A3 round-robin, comparator edge timestamps (pin 3) | **Cited**, PJRC; pins 0–3.3 V, not 5 V tolerant |
+| Photodiode + TIA | Light, no electrical contact | Pole to be measured |
 
 Why one loop (**Derived**, Thévenin): a second input loop through R_e reduces, for the lamp, to one source behind one resistor,
 
@@ -67,7 +66,7 @@ $$
 \end{aligned}
 $$
 
-t_f is the formative delay and t_s the statistical delay. With t_d drawn i.i.d., the lamp has a hysteretic state plus a pending-event timer, but no afterglow kinetics: it is the N-A surrogate lamp. All of V_b, V_m, r_on, I_x and the delay distribution are **Unknown** until E1/E2.
+t_f is the formative delay and t_s the statistical delay. With t_d drawn i.i.d., the lamp has a hysteretic state plus a pending-event timer, but no afterglow kinetics: it is the N-A surrogate lamp. All of V_b, V_m, r_on, I_x and the delay distribution are **Unknown** until measured.
 
 ### 3.4 Thévenin view and lit operating point (Derived)
 
@@ -90,7 +89,7 @@ With a measured lit curve v_L = f(i_L), solve V_th = i_L(R_th + R_S) + f(i_L) in
 | R2 lit | V_th > V_b and i_op > I_x | Continuous glow; the input modulates i_L, v_L, light |
 | latch | V_th < V_b and i_op > I_x | Bistable: state depends on history; violates initial-state forgetting |
 
-Exact strike/holding equalities are boundary cases, not robust operating regimes; at V_th = V_b an initially lower node approaches threshold asymptotically. The development protocol keeps an input range inside one regime (an experimental restriction, not a reservoir theorem), except the R0/R1 edge band adopted for E4 by REGIME-02; the latch band stays excluded.
+Exact strike/holding equalities are boundary cases, not robust operating regimes; at V_th = V_b an initially lower node approaches threshold asymptotically. The development protocol keeps an input range inside one regime (an experimental restriction, not a reservoir theorem), except the R0/R1 edge band adopted by REGIME-02; the latch band stays excluded.
 
 **R1 flash period with zero delay (Derived; verified by simulation to 0.1 %, `tests/test_sim.py`):**
 
@@ -118,7 +117,7 @@ P_{R_B,short} &= \frac{V_{D,max}^2 R_B}{(R_B')^2}
 \end{aligned}
 $$
 
-The ballast limits the source current only; i_pk is limited by r_on, R_S and lead inductance. The datasheet gives no pulse rating (**Cited** absence), so i_pk is measured on R_S in E1. **Derived:** ΔE is capacitor energy loss, not total lamp pulse energy: the source can also contribute and other resistors dissipate energy. `Config.safety()` instead reports conservative model envelopes using v ≤ V_D,max: peak branch current ≤ max(0, V_D,max − V_m)/(r_on + R_S) and stored capacitor energy ≤ C_s V_D,max²/2. These require positive passive resistances, initial node voltage below that bound and no source overshoot beyond it; they are not hardware guarantees. The legacy `strike_energy_j` field denotes this stored-energy envelope; `acquire.py` refuses lamp stages unless the continuous bound holds.
+The ballast limits the source current only; i_pk is limited by r_on, R_S and lead inductance. The datasheet gives no pulse rating (**Cited** absence), so i_pk must be measured on R_S. **Derived:** ΔE is capacitor energy loss, not total lamp pulse energy: the source can also contribute and other resistors dissipate energy. `Config.safety()` instead reports conservative model envelopes using v ≤ V_D,max: peak branch current ≤ max(0, V_D,max − V_m)/(r_on + R_S) and stored capacitor energy ≤ C_s V_D,max²/2. These require positive passive resistances, initial node voltage below that bound and no source overshoot beyond it; they are not hardware guarantees. The `strike_energy_j` field denotes this stored-energy envelope.
 
 ### 3.7 External memory bound (ATTR-01)
 
@@ -134,7 +133,7 @@ For every external element j (DAC/filter, driver, divider/buffer, TIA, anti-alia
 \epsilon_j = \frac{|y_j(t_0 + T_{step}) - y_j(\infty)|}{|y_j(\infty) - y_j(t_0)|}, \qquad \epsilon_j = e^{-T_{step}/\tau_j} \ \text{for one pole}
 ```
 
-measured in E0 (`analyze e0`) and required below a prefixed ε_max. **Derived:** Since δv = δv_L + R_S δi_L, the node sees g_L/(1+R_S g_L), not g_L. Require a positive total conductance for decay.
+measured on hardware and required below a prefixed ε_max. **Derived:** Since δv = δv_L + R_S δi_L, the node sees g_L/(1+R_S g_L), not g_L. Require a positive total conductance for decay.
 
 **Inferred:** Evaluate residuals over every actual sample/sub-window, not just the end of T_step. Include cascaded poles and uncertainty: individual end-of-step limits do not bound the full feature response. A bound limits how much one pole can contribute; it never proves intrinsic memory, which is why N-A exists. Example from simulation: a 2 µs driver pole read by the first of four within-step samples leaks enough of the previous step to give linear capacity ≈ 1 at delay 1 for a memoryless lamp.
 
@@ -155,18 +154,14 @@ All stimuli are segments [level ℓ, ticks]. For random held input in a level ra
 x_k = \frac{\ell_k}{255}, \qquad u_k = \frac{1}{2}\,\frac{\ell_k - \ell_{lo}}{\ell_{hi} - \ell_{lo}} \in [0, 0.5]
 ```
 
-Targets are built from the exact applied u_k. Ramps (E1) step ℓ up then down; pulse pairs (E2) are settle → conditioning pulse (or sub-breakdown sham) → rest τ → identical test pulse, in shuffled order.
+Targets are built from the exact applied u_k. Ramps step ℓ up then down; pulse pairs are settle → conditioning pulse (or sub-breakdown sham) → rest τ → identical test pulse, in shuffled order.
 
-### 4.3 Firmware timing
+### 4.3 States (READ-01)
 
-One tick = (ocr1a + 1) CPU cycles. Segment i occupies ticks [S_i, S_{i+1}) with S_0 = 0 and S_i = Σ_{j<i} ticks_j; the level changes at the start of tick S_i, before that tick's conversion. Channel c of n is sampled on ticks t with (t − 1) mod n = c, so channels are skewed by one tick each. Flash time = (tick·(ocr1a + 1) + sub)/f_CPU. Alignment is verified in E0 with the drive monitor.
-
-### 4.4 States (READ-01)
-
-For segment k and channel c ∈ {v, v_S, light}, the state is the M sub-window means of the calibrated channel,
+For segment k and channel c ∈ {v, v_S, light}, the state is the M sub-window means of the channel signal y_c [V],
 
 ```math
-X_{k} = \left[\bar y_{c}(k, 1), \dots, \bar y_{c}(k, M)\right]_{c}, \qquad y = \text{gain}_c\,(\text{ADC volts} - \text{offset}_c)
+X_{k} = \left[\bar y_{c}(k, 1), \dots, \bar y_{c}(k, M)\right]_{c}
 ```
 
 Sub-window averaging is linear and disclosed. The drive monitor is never a feature. Summary features (flash count, within-step standard deviation) are nonlinear and only an ablation.
@@ -231,7 +226,7 @@ $$
 
 **Inferred:** Δ is exploratory evidence of surrogate discrepancy, not a calibrated rejection statistic or identification of gas memory. Missing external poles, parameter error and stochastic mismatch can also produce it. Before confirmation, generate independent repeated null datasets over justified parameter/noise uncertainty and run the entire fitting/selection pipeline to obtain a null distribution of Δ. Validate that calibration on held-out null controls, then fix a multiplicity-adjusted rejection threshold and practical effect margin. This calibration is not yet implemented; no intrinsic-memory verdict may be generated from Δ alone. Ground truth in `tests/test_analysis.py`: synthetic hidden memory gives Δ > 0.5; none gives |Δ| < 0.02.
 
-### 5.6 Pulse-pair memory (E2)
+### 5.6 Pulse-pair memory
 
 Delay per trial: d = first strike in the test pulse − test onset (no strike = censored, kept). Per rest interval τ:
 
@@ -251,31 +246,10 @@ Unit = trial, clustered by bulb (or bulb × session); one paired difference per 
 p^{Holm}_{(i)} = \max_{j \le i} \min\left(1,\ (m - j + 1)\,p_{(j)}\right)
 ```
 
-## 6. Protocol and decision rule
+## 6. Unknowns
 
-| Stage | Purpose | Outputs |
-|---|---|---|
-| E0 | Driver, filter, divider, sensors, ADC, comparator on open / resistor / resistor + C dummy loads; LED pulses into the photodiode (LED-01) | ε_j, Z_o, poles, skew, drops, C_s, gains |
-| E1 | Per bulb, dark box: slow ramp → V_b bracket, lit-branch fit (V_m, r_on), I_x bound, i_pk on R_S | Surrogate parameters, regime map |
-| E2 | Pulse pairs with sham and settling check; fixed-voltage delay separate from ramped strike | δ(τ), strike fraction, censored trials |
-| E3 | R2 small-signal step response vs resistor substitute (method: Alonso et al. 2007) | Lit-state timescales (historical µs response is motivation only; the selected NE-2H timescale remains **Unknown**) |
-| E4 | T_step per regime from E2/E3 (TIME-01); capacities, consistency, attribution, NARMA vs N-B | Development estimates; δ and repeat counts fixed |
-| E5 | Everything frozen; fresh bulbs and sessions | Confirmatory result |
-
-| Outcome | Requires |
-|---|---|
-| Intrinsic memory supported | Independently validated E2 history effect **or E3 lit-state history effect**, with external-state uncertainty controlled; calibrated rejection of the specified surrogate; positive-delay nonlinear processing and repeatability meeting frozen criteria. Current Δ diagnostic alone is insufficient |
-| Neon–circuit reservoir only | Gain over resistor control and N-B, but N-A explains it |
-| Negative or inconclusive | Neither E2 nor E3 supports the claim, or attribution remains unresolved, or consistency is too low. Excess external residual makes intrinsic attribution inconclusive, not necessarily whole-circuit computation impossible |
-
-## 7. Safety
-
-Before any hardware step: state V_D,max and the derived bounds of §3.6 from the actual parts; verify the driver's own current limit into a dummy load, resistor voltage and power ratings (R_B, R_d1, monitor divider), clamps on every ADC pin (3.3 V), probe ratings, the star return and a bleed path for stored charge. Never connect the lamp without R_B: "Bulb may shatter and/or circuit may be damaged without external series resistance" (**Cited**, CML datasheet fn 12). Software checks are not interlocks.
-
-## 8. Unknowns
-
-V_b distribution, V_m, r_on, I_x and delay statistics per bulb; C_s; Z_o, τ_drv and sensor poles; R_B, R_S, R_d, V_D,max; DAC choice; ε_max, δ, consistency tolerance; T_step per regime; NE-2H fill pressure and electrode material. Not yet implemented: calibrated attribution-null distribution, censoring-aware confirmatory E2 endpoint, discrete-input orthogonal capacity basis, measured sensor poles inside the surrogate (before E5), an E3 capture path faster than the round-robin ADC, and Richardson bias correction of capacities.
+V_b distribution, V_m, r_on, I_x and delay statistics per bulb; C_s; Z_o, τ_drv and sensor poles; R_B, R_S, R_d, V_D,max; ε_max, δ, consistency tolerance; T_step per regime; NE-2H fill pressure and electrode material. Not yet implemented: calibrated attribution-null distribution, censoring-aware confirmatory pulse-pair endpoint, discrete-input orthogonal capacity basis, measured sensor poles inside the surrogate, and Richardson bias correction of capacities.
 
 ## Review correction status (2026-11-04)
 
-This revision corrects algebra and qualifies inference claims from the earlier design report; conflicting formulas in that historical report are superseded by this technical description. Scientific protocol refinements remain proposals until reviewed. No hardware values or device behavior have been validated by these corrections.
+This revision corrects algebra and qualifies inference claims from the earlier design report; conflicting formulas in that historical report are superseded by this technical description. Scientific protocol refinements remain proposals until reviewed. No device behavior has been validated by these corrections.
