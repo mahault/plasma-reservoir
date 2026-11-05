@@ -1,0 +1,102 @@
+{
+  "circuit": {
+    "R_B": {
+      "value": 200000.0,
+      "unit": "ohm",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "Z_o": {
+      "value": 1000.0,
+      "unit": "ohm",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "R_d": {
+      "value": 10000000.0,
+      "unit": "ohm",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "R_S": {
+      "value": 1000.0,
+      "unit": "ohm",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "C_s": {
+      "value": 1e-11,
+      "unit": "F",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "tau_drv": {
+      "value": 2e-06,
+      "unit": "s",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "V_bias": {
+      "value": 90.0,
+      "unit": "V",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "G": {
+      "value": 60.0,
+      "unit": "V",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "V_D_max": {
+      "value": 150.0,
+      "unit": "V",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    }
+  },
+  "lamp": {
+    "V_b": {
+      "value": 110.0,
+      "unit": "V",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "V_m": {
+      "value": 60.0,
+      "unit": "V",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "r_on": {
+      "value": 10000.0,
+      "unit": "ohm",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "I_x": {
+      "value": 0.0003,
+      "unit": "A",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "t_f": {
+      "value": 1e-06,
+      "unit": "s",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "t_s": {
+      "value": 5e-06,
+      "unit": "s",
+      "source": "assumed",
+      "note": "illustrative round number, NOT an NE-2H value"
+    },
+    "I_design": {
+      "value": 0.0019,
+      "unit": "A",
+      "source": "datasheet",
+      "note": "CML-IT C2A (NE-2H) design current; not an absolute or pulse rating (research doc \u00a73)"
+    }
+  }
+}
