@@ -16,3 +16,16 @@ results/
 artifacts/
 bench.yaml
 acquisition.local.yaml
+# local working documents (CLAUDE.md: git and documentation rule)
+CLAUDE.md
+CONTEXT.md
+contribution.md
+AGENTS.md
+# docs: only the technical description, the study report and exported figures are tracked
+docs/*
+!docs/technical.md
+!docs/study_2026-11-04.md
+!docs/study/
+!docs/diagrams/
+docs/diagrams/*
+!docs/diagrams/*.png

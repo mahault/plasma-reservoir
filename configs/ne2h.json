@@ -1,0 +1,114 @@
+{
+  "circuit": {
+    "R_B": {
+      "value": null,
+      "unit": "ohm",
+      "source": "unknown"
+    },
+    "Z_o": {
+      "value": null,
+      "unit": "ohm",
+      "source": "unknown"
+    },
+    "R_d": {
+      "value": null,
+      "unit": "ohm",
+      "source": "unknown"
+    },
+    "R_S": {
+      "value": null,
+      "unit": "ohm",
+      "source": "unknown"
+    },
+    "C_s": {
+      "value": null,
+      "unit": "F",
+      "source": "unknown"
+    },
+    "tau_drv": {
+      "value": null,
+      "unit": "s",
+      "source": "unknown"
+    },
+    "V_bias": {
+      "value": null,
+      "unit": "V",
+      "source": "unknown"
+    },
+    "G": {
+      "value": null,
+      "unit": "V",
+      "source": "unknown"
+    },
+    "V_D_max": {
+      "value": null,
+      "unit": "V",
+      "source": "unknown"
+    }
+  },
+  "lamp": {
+    "V_b": {
+      "value": null,
+      "unit": "V",
+      "source": "unknown"
+    },
+    "V_m": {
+      "value": null,
+      "unit": "V",
+      "source": "unknown"
+    },
+    "r_on": {
+      "value": null,
+      "unit": "ohm",
+      "source": "unknown"
+    },
+    "I_x": {
+      "value": null,
+      "unit": "A",
+      "source": "unknown"
+    },
+    "t_f": {
+      "value": null,
+      "unit": "s",
+      "source": "unknown"
+    },
+    "t_s": {
+      "value": null,
+      "unit": "s",
+      "source": "unknown"
+    },
+    "I_design": {
+      "value": 0.0019,
+      "unit": "A",
+      "source": "datasheet",
+      "note": "CML-IT C2A (NE-2H) design current; not an absolute or pulse rating (research doc \u00a73)"
+    }
+  },
+  "sensors": {
+    "gain_drive": {
+      "value": null,
+      "unit": "V/V",
+      "source": "unknown"
+    },
+    "gain_v": {
+      "value": null,
+      "unit": "V/V",
+      "source": "unknown"
+    },
+    "gain_vs": {
+      "value": null,
+      "unit": "V/V",
+      "source": "unknown"
+    },
+    "gain_light": {
+      "value": null,
+      "unit": "arb/V",
+      "source": "unknown"
+    },
+    "dark_light": {
+      "value": null,
+      "unit": "V",
+      "source": "unknown"
+    }
+  }
+}
